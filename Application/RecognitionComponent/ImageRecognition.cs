@@ -6,8 +6,9 @@ using Microsoft.ML.OnnxRuntime;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
-//using YOLOv4MLNet.DataStructures;
+using System.Threading.Tasks;
 using static Microsoft.ML.Transforms.Image.ImageResizingEstimator;
+
 
 namespace RecognitionComponent
 {
@@ -15,21 +16,32 @@ namespace RecognitionComponent
     {
         const string modelPath = @"C:\Users\Nastya\source\repos\MachineLearning\yolov4.onnx";
 
-        const string imageFolder = @"C:\Users\Nastya\source\repos\7sem\lab11\Application\ConsoleAppCore\Assets\Images";
-
-        const string imageOutputFolder = @"C:\Users\Nastya\source\repos\7sem\lab11\Application\ConsoleAppCore\Assets\Output";
-
         static readonly string[] classesNames = new string[] { "person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train", "truck", "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "sofa", "pottedplant", "bed", "diningtable", "toilet", "tvmonitor", "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush" };
 
-        public static void imageRecognition()
+        static async void processImageAsync(string imageName, string imageFolder, PredictionEngine<YoloV4BitmapData, YoloV4Prediction> predictionEngine)
         {
-            Directory.CreateDirectory(imageOutputFolder);
+            await Task.Factory.StartNew(() => {
+                using (var bitmap = new Bitmap(Image.FromFile(Path.Combine(imageFolder, imageName))))
+                {
+                    var predict = predictionEngine.Predict(new YoloV4BitmapData() { Image = bitmap });
+                    var results = predict.GetResults(classesNames, 0.3f, 0.7f);
+                    Console.WriteLine(imageName);
+
+                    foreach (var res in results)
+                    {
+                        var x1 = res.BBox[0];
+                        var y1 = res.BBox[1];
+                        var x2 = res.BBox[2];
+                        var y2 = res.BBox[3];
+                        Console.WriteLine($"    {res.Label} in a rectangle between ({x1:0.0}, {y1:0.0}) and ({x2:0.0}, {y2:0.0}) with probability {res.Confidence.ToString("0.00")}");
+                    }
+                }
+            });
+        }
+        public static void imageRecognition(string imageFolder)
+        {
             MLContext mlContext = new MLContext();
 
-            // model is available here:
-            // https://github.com/onnx/models/tree/master/vision/object_detection_segmentation/yolov4
-
-            // Define scoring pipeline
             var pipeline = mlContext.Transforms.ResizeImages(inputColumnName: "bitmap", outputColumnName: "input_1:0", imageWidth: 416, imageHeight: 416, resizing: ResizingKind.IsoPad)
                 .Append(mlContext.Transforms.ExtractPixels(outputColumnName: "input_1:0", scaleImage: 1f / 255f, interleavePixelColors: true))
                 .Append(mlContext.Transforms.ApplyOnnxModel(
@@ -52,46 +64,35 @@ namespace RecognitionComponent
                     },
                     modelFile: modelPath, recursionLimit: 100));
 
-            // Fit on empty list to obtain input data schema
             var model = pipeline.Fit(mlContext.Data.LoadFromEnumerable(new List<YoloV4BitmapData>()));
 
-            // Create prediction engine
             var predictionEngine = mlContext.Model.CreatePredictionEngine<YoloV4BitmapData, YoloV4Prediction>(model);
 
-            // save model
-            //mlContext.Model.Save(model, predictionEngine.OutputSchema, Path.ChangeExtension(modelPath, "zip"));
             var sw = new Stopwatch();
             sw.Start();
-            foreach (string imageName in new string[] { "dogs_cats.jpg" })
+            string[] fileNames = DirectoryParser.parse(imageFolder);
+
+            
+            foreach (string imageName in fileNames)
             {
-                using (var bitmap = new Bitmap(Image.FromFile(Path.Combine(imageFolder, imageName))))
+                //processImageAsync(imageName, imageFolder, predictionEngine);
+                using (var bitmap = new Bitmap(Image.FromFile(Path.Combine(imageFolder, imageName))))  
                 {
-                    // predict
                     var predict = predictionEngine.Predict(new YoloV4BitmapData() { Image = bitmap });
                     var results = predict.GetResults(classesNames, 0.3f, 0.7f);
+                    Console.WriteLine(imageName);
 
-                    using (var g = Graphics.FromImage(bitmap))
+                    foreach (var res in results)
                     {
-                        foreach (var res in results)
-                        {
-                            // draw predictions
-                            var x1 = res.BBox[0];
-                            var y1 = res.BBox[1];
-                            var x2 = res.BBox[2];
-                            var y2 = res.BBox[3];
-                            g.DrawRectangle(Pens.Red, x1, y1, x2 - x1, y2 - y1);
-                            using (var brushes = new SolidBrush(Color.FromArgb(50, Color.Red)))
-                            {
-                                g.FillRectangle(brushes, x1, y1, x2 - x1, y2 - y1);
-                            }
-
-                            g.DrawString(res.Label + " " + res.Confidence.ToString("0.00"),
-                                         new Font("Arial", 12), Brushes.Blue, new PointF(x1, y1));
-                        }
-                        bitmap.Save(Path.Combine(imageOutputFolder, Path.ChangeExtension(imageName, "_processed" + Path.GetExtension(imageName))));
+                        var x1 = res.BBox[0];
+                        var y1 = res.BBox[1];
+                        var x2 = res.BBox[2];
+                        var y2 = res.BBox[3];
+                        Console.WriteLine($"    {res.Label} in a rectangle between ({x1:0.0}, {y1:0.0}) and ({x2:0.0}, {y2:0.0}) with probability {res.Confidence.ToString("0.00")}");
                     }
                 }
             }
+            
             sw.Stop();
             Console.WriteLine($"Done in {sw.ElapsedMilliseconds}ms.");
         }

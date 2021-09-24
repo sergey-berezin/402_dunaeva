@@ -7,7 +7,7 @@ namespace ConsoleAppCore
     {
         static void Main(string[] args)
         {
-            ImageRecognition.imageRecognition();
+            ImageRecognition.imageRecognition(args[0]);
         }
     }
 }

@@ -18,23 +18,14 @@ namespace RecognitionComponent
 
         static readonly string[] classesNames = new string[] { "person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train", "truck", "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "sofa", "pottedplant", "bed", "diningtable", "toilet", "tvmonitor", "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush" };
 
-        static async void processImageAsync(string imageName, string imageFolder, PredictionEngine<YoloV4BitmapData, YoloV4Prediction> predictionEngine)
+        static async Task<IReadOnlyList<YoloV4Result>> processImageAsync(string imageName, string imageFolder, PredictionEngine<YoloV4BitmapData, YoloV4Prediction> predictionEngine)
         {
-            await Task.Factory.StartNew(() => {
+            return await Task.Factory.StartNew(() => {
                 using (var bitmap = new Bitmap(Image.FromFile(Path.Combine(imageFolder, imageName))))
                 {
                     var predict = predictionEngine.Predict(new YoloV4BitmapData() { Image = bitmap });
                     var results = predict.GetResults(classesNames, 0.3f, 0.7f);
-                    Console.WriteLine(imageName);
-
-                    foreach (var res in results)
-                    {
-                        var x1 = res.BBox[0];
-                        var y1 = res.BBox[1];
-                        var x2 = res.BBox[2];
-                        var y2 = res.BBox[3];
-                        Console.WriteLine($"    {res.Label} in a rectangle between ({x1:0.0}, {y1:0.0}) and ({x2:0.0}, {y2:0.0}) with probability {res.Confidence.ToString("0.00")}");
-                    }
+                    return results;
                 }
             });
         }
@@ -71,28 +62,34 @@ namespace RecognitionComponent
             var sw = new Stopwatch();
             sw.Start();
             string[] fileNames = DirectoryParser.parse(imageFolder);
-
+            Task[] tasks = new Task[fileNames.Length];
             
-            foreach (string imageName in fileNames)
+            for (int i = 0; i < fileNames.Length; i++)
             {
-                //processImageAsync(imageName, imageFolder, predictionEngine);
-                using (var bitmap = new Bitmap(Image.FromFile(Path.Combine(imageFolder, imageName))))  
+                tasks[i] = Task.Factory.StartNew(pi =>
                 {
-                    var predict = predictionEngine.Predict(new YoloV4BitmapData() { Image = bitmap });
-                    var results = predict.GetResults(classesNames, 0.3f, 0.7f);
-                    Console.WriteLine(imageName);
-
-                    foreach (var res in results)
+                    int idx = (int)pi;
+                    //using (var bitmap = new Bitmap(Image.FromFile(Path.Combine(imageFolder, imageName))))  
+                    using (var bitmap = new Bitmap(Image.FromFile(Path.Combine(imageFolder, fileNames[idx]))))
                     {
-                        var x1 = res.BBox[0];
-                        var y1 = res.BBox[1];
-                        var x2 = res.BBox[2];
-                        var y2 = res.BBox[3];
-                        Console.WriteLine($"    {res.Label} in a rectangle between ({x1:0.0}, {y1:0.0}) and ({x2:0.0}, {y2:0.0}) with probability {res.Confidence.ToString("0.00")}");
+                        var predict = predictionEngine.Predict(new YoloV4BitmapData() { Image = bitmap });
+
+                        var results = predict.GetResults(classesNames, 0.3f, 0.7f);
+                            Console.WriteLine(fileNames[idx]);
+
+                        foreach (var res in results)
+                        {
+                            var x1 = res.BBox[0];
+                            var y1 = res.BBox[1];
+                            var x2 = res.BBox[2];
+                            var y2 = res.BBox[3];
+                            Console.WriteLine($"    {res.Label} in a rectangle between ({x1:0.0}, {y1:0.0}) and ({x2:0.0}, {y2:0.0}) with probability {res.Confidence.ToString("0.00")}");
+                        }
                     }
-                }
+                }, i);
+
             }
-            
+            Task.WaitAll(tasks);
             sw.Stop();
             Console.WriteLine($"Done in {sw.ElapsedMilliseconds}ms.");
         }

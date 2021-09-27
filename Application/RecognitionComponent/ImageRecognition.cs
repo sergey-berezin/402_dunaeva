@@ -8,6 +8,7 @@ using System.Drawing;
 using System.IO;
 using System.Threading.Tasks;
 using static Microsoft.ML.Transforms.Image.ImageResizingEstimator;
+using System.Collections.Concurrent;
 
 
 namespace RecognitionComponent
@@ -61,35 +62,48 @@ namespace RecognitionComponent
 
             var sw = new Stopwatch();
             sw.Start();
+
             string[] fileNames = DirectoryParser.parse(imageFolder);
-            Task[] tasks = new Task[fileNames.Length];
+            var tasks = new Task<Bitmap>[fileNames.Length];
             
+            ConcurrentDictionary<string, Bitmap> bitmaps = new ConcurrentDictionary<string, Bitmap>();
+
             for (int i = 0; i < fileNames.Length; i++)
             {
-                tasks[i] = Task.Factory.StartNew(pi =>
+                tasks[i] = Task.Factory.StartNew<Bitmap>(pi =>
                 {
-                    int idx = (int)pi;
-                    //using (var bitmap = new Bitmap(Image.FromFile(Path.Combine(imageFolder, imageName))))  
-                    using (var bitmap = new Bitmap(Image.FromFile(Path.Combine(imageFolder, fileNames[idx]))))
-                    {
-                        var predict = predictionEngine.Predict(new YoloV4BitmapData() { Image = bitmap });
-
-                        var results = predict.GetResults(classesNames, 0.3f, 0.7f);
-                            Console.WriteLine(fileNames[idx]);
-
-                        foreach (var res in results)
-                        {
-                            var x1 = res.BBox[0];
-                            var y1 = res.BBox[1];
-                            var x2 = res.BBox[2];
-                            var y2 = res.BBox[3];
-                            Console.WriteLine($"    {res.Label} in a rectangle between ({x1:0.0}, {y1:0.0}) and ({x2:0.0}, {y2:0.0}) with probability {res.Confidence.ToString("0.00")}");
-                        }
-                    }
+                    int idx = (int)pi;  
+                    var bitmap = new Bitmap(Image.FromFile(Path.Combine(imageFolder, fileNames[idx])));
+                    return bitmap;
                 }, i);
-
+                bitmaps.GetOrAdd(fileNames[i], tasks[i].Result);
+                
             }
             Task.WaitAll(tasks);
+
+            Task[] tasksResult = new Task[bitmaps.Count];
+            int j = 0;
+            foreach (var bm in bitmaps)
+            {
+                var predict = predictionEngine.Predict(new YoloV4BitmapData() { Image = bm.Value });
+
+                tasksResult[j] = Task.Factory.StartNew(() => {
+                    var results = predict.GetResults(classesNames, 0.3f, 0.7f);
+                    Console.WriteLine(bm.Key);
+                    
+                    foreach (var res in results)
+                    {
+                        var x1 = res.BBox[0];
+                        var y1 = res.BBox[1];
+                        var x2 = res.BBox[2];
+                        var y2 = res.BBox[3];
+                        Console.WriteLine($"    {res.Label} in a rectangle between ({x1:0.0}, {y1:0.0}) and ({x2:0.0}, {y2:0.0}) with probability {res.Confidence.ToString("0.00")}");
+                    }
+                });
+                j++;    
+            }
+            Task.WaitAll(tasksResult);
+
             sw.Stop();
             Console.WriteLine($"Done in {sw.ElapsedMilliseconds}ms.");
         }

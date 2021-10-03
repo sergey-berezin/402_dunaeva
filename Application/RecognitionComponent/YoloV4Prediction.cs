@@ -54,7 +54,7 @@ namespace RecognitionComponent
         [ColumnName("height")]
         public float ImageHeight { get; set; }
 
-        public IReadOnlyList<YoloV4Result> GetResults(string[] categories, float scoreThres = 0.5f, float iouThres = 0.5f)
+        public IReadOnlyList<YoloV4Result> GetResults(string[] categories, string fileName, float scoreThres = 0.5f, float iouThres = 0.5f)
         {
             List<float[]> postProcesssedResults = new List<float[]>();
             int classesCount = categories.Length;
@@ -152,7 +152,7 @@ namespace RecognitionComponent
                 var conf = res[4];
                 string label = categories[(int)res[5]];
 
-                resultsNms.Add(new YoloV4Result(res.Take(4).ToArray(), label, conf));
+                resultsNms.Add(new YoloV4Result(res.Take(4).ToArray(), label, conf, fileName));
                 postProcesssedResults[f] = null;
 
                 var iou = postProcesssedResults.Select(bbox => bbox == null ? float.NaN : BoxIoU(res, bbox)).ToList();

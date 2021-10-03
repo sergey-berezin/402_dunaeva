@@ -8,11 +8,9 @@ namespace RecognitionComponent
 {
     class DirectoryParser
     {
-        public static string[] parse(string directoryPath)
+        public static string[] Parse(string directoryPath)
         {
-            List<string> listOfFiles = new List<string>();
-            Directory.GetFiles(directoryPath).ToList().ForEach(f => listOfFiles.Add(Path.GetFileName(f)));
-            return listOfFiles.ToArray();
+            return Directory.GetFiles(directoryPath).Select(f => Path.GetFileName(f)).ToArray();
         }
     }
 }

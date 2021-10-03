@@ -22,11 +22,14 @@ namespace RecognitionComponent
         /// </summary>
         public float Confidence { get; }
 
-        public YoloV4Result(float[] bbox, string label, float confidence)
+        public string FileName { get; }
+
+        public YoloV4Result(float[] bbox, string label, float confidence, string fileName)
         {
             BBox = bbox;
             Label = label;
             Confidence = confidence;
+            FileName = fileName;
         }
     }
 }

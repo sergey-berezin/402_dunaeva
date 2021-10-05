@@ -9,6 +9,7 @@ using System.IO;
 using System.Threading.Tasks;
 using static Microsoft.ML.Transforms.Image.ImageResizingEstimator;
 using System.Collections.Concurrent;
+using System.Threading;
 
 
 namespace RecognitionComponent
@@ -19,8 +20,10 @@ namespace RecognitionComponent
 
         static readonly string[] classesNames = new string[] { "person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train", "truck", "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "sofa", "pottedplant", "bed", "diningtable", "toilet", "tvmonitor", "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush" };
 
-        public static ConcurrentStack<YoloV4Result> ImageRecognize(string imageFolder)
+        public static ConcurrentQueue<YoloV4Result> resultsQueue = new ConcurrentQueue<YoloV4Result>();
+        public static void ImageRecognize(string imageFolder)
         {
+
             var yoloV4Results = new ConcurrentStack<YoloV4Result>();
             MLContext mlContext = new MLContext();
 
@@ -54,43 +57,65 @@ namespace RecognitionComponent
             sw.Start();
 
             string[] fileNames = DirectoryParser.Parse(imageFolder);
-            var tasks = new Task<Bitmap>[fileNames.Length];
-            
-            ConcurrentDictionary<string, Bitmap> bitmaps = new ConcurrentDictionary<string, Bitmap>();
+            var tasks = new Task[fileNames.Length];
+
+            ConcurrentQueue<ImageInfo> bitmaps = new ConcurrentQueue<ImageInfo>();
+
+            var cts = new CancellationTokenSource();
 
             for (int i = 0; i < fileNames.Length; i++)
             {
-                tasks[i] = Task.Factory.StartNew<Bitmap>(pi =>
+                
+                tasks[i] = Task.Factory.StartNew(pi =>
                 {
+                    if (cts.IsCancellationRequested)
+                    {
+                        Console.WriteLine("Task was cancelled before it got started.");
+                    }
+                    
                     int idx = (int)pi;  
                     var bitmap = new Bitmap(Image.FromFile(Path.Combine(imageFolder, fileNames[idx])));
-                    return bitmap;
-                }, i);
-                bitmaps.GetOrAdd(fileNames[i], tasks[i].Result);
-                
+                    ImageInfo imageInfo = new ImageInfo(bitmap, fileNames[idx]);
+                    bitmaps.Enqueue(imageInfo);
+                    
+                }, i, cts.Token);
             }
+
+            Task[] tasksResult = new Task[fileNames.Length];
             
-            Task[] tasksResult = new Task[bitmaps.Count];
-            int j = 0;
-            foreach (var bm in bitmaps)
+            for (int j = 0; j < fileNames.Length; j++)
             {
-                var predict = predictionEngine.Predict(new YoloV4BitmapData() { Image = bm.Value });
+                ImageInfo imageInfo;
+                while (!bitmaps.TryDequeue(out imageInfo)) { }
+
+                var predict = predictionEngine.Predict(new YoloV4BitmapData() { Image = imageInfo.Bitmap });
 
                 tasksResult[j] = Task.Factory.StartNew(() => {
-                    var results = predict.GetResults(classesNames, bm.Key , 0.3f, 0.7f);
+                    if (cts.IsCancellationRequested)
+                    {
+                        Console.WriteLine("Task was cancelled before it got started.");
+                    }
                     
+                    var results = predict.GetResults(classesNames, imageInfo.FileName, 0.3f, 0.7f);
+                    Console.WriteLine(imageInfo.FileName);
                     foreach (var res in results)
                     {
-                        yoloV4Results.Push(res);
+                        resultsQueue.Enqueue(res);
+                       
+                        var x1 = res.BBox[0];
+                        var y1 = res.BBox[1];
+                        var x2 = res.BBox[2];
+                        var y2 = res.BBox[3];
+                        Console.WriteLine($"    {res.Label} in a rectangle between ({x1:0.0}, {y1:0.0}) and ({x2:0.0}, {y2:0.0}) with probability {res.Confidence.ToString("0.00")}");
                     }
-                });
-                j++;    
+                    
+                }, cts.Token);    
             }
+
             Task.WaitAll(tasksResult);
 
             sw.Stop();
             Console.WriteLine($"Done in {sw.ElapsedMilliseconds}ms.");
-            return yoloV4Results;
         }
     }
 }

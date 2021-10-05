@@ -6,7 +6,7 @@ using System.Linq;
 
 namespace RecognitionComponent
 {
-    class DirectoryParser
+    public class DirectoryParser
     {
         public static string[] Parse(string directoryPath)
         {

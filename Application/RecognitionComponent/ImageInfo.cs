@@ -6,7 +6,7 @@ using System.Drawing;
 
 namespace RecognitionComponent
 {
-    class ImageInfo
+    public class ImageInfo
     {
         public Bitmap Bitmap { get; set; }
         public string FileName { get; set; }

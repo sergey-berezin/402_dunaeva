@@ -16,13 +16,14 @@ namespace RecognitionComponent
 {
     public class ImageRecognition
     {
-        const string modelPath = @"C:\Users\Nastya\source\repos\MachineLearning\yolov4.onnx";
+        const string modelPath = @"C:\Users\Denis\model\yolov4.onnx";
 
         static readonly string[] classesNames = new string[] { "person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train", "truck", "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "sofa", "pottedplant", "bed", "diningtable", "toilet", "tvmonitor", "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush" };
 
         public static ConcurrentQueue<YoloV4Result> resultsQueue = new ConcurrentQueue<YoloV4Result>();
-        public static void ImageRecognize(string imageFolder)
+        public static void ImageRecognize(string imageFolder, CancellationToken token)
         {
+            if (token.IsCancellationRequested) return;
 
             var yoloV4Results = new ConcurrentStack<YoloV4Result>();
             MLContext mlContext = new MLContext();
@@ -61,16 +62,17 @@ namespace RecognitionComponent
 
             ConcurrentQueue<ImageInfo> bitmaps = new ConcurrentQueue<ImageInfo>();
 
-            var cts = new CancellationTokenSource();
+            //var cts = new CancellationTokenSource();
 
             for (int i = 0; i < fileNames.Length; i++)
             {
                 
                 tasks[i] = Task.Factory.StartNew(pi =>
                 {
-                    if (cts.IsCancellationRequested)
+                    if (token.IsCancellationRequested)
                     {
                         Console.WriteLine("Task was cancelled before it got started.");
+                        return;
                     }
                     
                     int idx = (int)pi;  
@@ -78,7 +80,7 @@ namespace RecognitionComponent
                     ImageInfo imageInfo = new ImageInfo(bitmap, fileNames[idx]);
                     bitmaps.Enqueue(imageInfo);
                     
-                }, i, cts.Token);
+                }, i, token);
             }
 
             Task[] tasksResult = new Task[fileNames.Length];
@@ -91,9 +93,10 @@ namespace RecognitionComponent
                 var predict = predictionEngine.Predict(new YoloV4BitmapData() { Image = imageInfo.Bitmap });
 
                 tasksResult[j] = Task.Factory.StartNew(() => {
-                    if (cts.IsCancellationRequested)
+                    if (token.IsCancellationRequested)
                     {
                         Console.WriteLine("Task was cancelled before it got started.");
+                        return;
                     }
                     
                     var results = predict.GetResults(classesNames, imageInfo.FileName, 0.3f, 0.7f);
@@ -109,10 +112,17 @@ namespace RecognitionComponent
                         Console.WriteLine($"    {res.Label} in a rectangle between ({x1:0.0}, {y1:0.0}) and ({x2:0.0}, {y2:0.0}) with probability {res.Confidence.ToString("0.00")}");
                     }
                     
-                }, cts.Token);    
+                }, token);    
             }
 
-            Task.WaitAll(tasksResult);
+            try
+            {
+                Task.WaitAll(tasksResult);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.Message);
+            }
 
             sw.Stop();
             Console.WriteLine($"Done in {sw.ElapsedMilliseconds}ms.");

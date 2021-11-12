@@ -32,11 +32,11 @@
             </Grid.ColumnDefinitions>
 
             <Grid Grid.Column="0" Margin="10">
-                <ListBox x:Name="imagesListBox" Grid.ColumnSpan="2"></ListBox>
+                <ListBox x:Name="imagesListBox" Grid.ColumnSpan="2" ItemsSource="{Binding Images}"></ListBox>
             </Grid>
 
             <Grid Grid.Column="1" Margin="10">
-                <ListBox x:Name="resultsListBox" Grid.ColumnSpan="2"></ListBox>
+                <ListBox x:Name="resultsListBox" Grid.ColumnSpan="2" ItemsSource="{Binding ResultsList}"></ListBox>
             </Grid>
             
         </Grid>

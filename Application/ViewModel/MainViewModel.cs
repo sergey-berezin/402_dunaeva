@@ -1,35 +1,31 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text;
-using System.Collections;
 using System.Drawing;
 using RecognitionComponent;
-using System.Windows.Input;
 using System.Threading.Tasks;
-using System.Diagnostics;
 using System.Drawing.Imaging;
 using System.Collections.Concurrent;
-using System.Linq;
 using System.Threading;
+using System.Windows.Media.Imaging;
+using System.IO;
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.Windows.Input;
+using System.Windows;
 
 namespace ViewModel
 {
     public interface IUIServices
     {
-        string SelectFileSave();
-        string SelectFile();
         event EventHandler RequerySuggested;
     }
     public class MainViewModel : ViewModelBase
     {
         public MainViewModel(IUIServices svc)
         {
-            
+            Images = new();
+            ResultsList = new();
         }
-        public static ConcurrentQueue<YoloV4Result> resultsQueueVM = new ConcurrentQueue<YoloV4Result>();
-
-        private bool isSelected;
-        private bool isRunning = false;
 
         private Folder selectedFolder;
         public Folder SelectedFolder
@@ -38,7 +34,6 @@ namespace ViewModel
             set
             {
                 selectedFolder = value;
-                isSelected = true;
                 RaisePropertyChanged("SelectedFolder");
             }
         }
@@ -49,40 +44,69 @@ namespace ViewModel
             SelectedFolder.UpdatePath(newFolderPath);
         }
 
-
-        public List<YoloV4Result> Recognize(CancellationToken token)
+        public ObservableCollection<System.Windows.Controls.Image> Images { get; set; }
+        public ObservableCollection<System.Windows.Controls.Image> ResultsList { get; set; }
+        public void Recognize(CancellationToken token)
         {
-            if (token.IsCancellationRequested) return new List<YoloV4Result>();
-            isRunning = true;
-            var task = Task.Factory.StartNew(() =>
+            if (token.IsCancellationRequested) return;
+
+            Task task = Task.Factory.StartNew(() =>
             {
-                if (token.IsCancellationRequested)
-                {
-                    return;
-                }
                 ImageRecognition.ImageRecognize(SelectedFolder.FolderPath, token);
-            }, token);
-            
-            List<YoloV4Result> results = new List<YoloV4Result>();
-            int length = DirectoryParser.Parse(SelectedFolder.FolderPath).Length;
-            Task[] tasks = new Task[6];
-            for (int i = 0; i < tasks.Length; i++)
+            });
+
+            bool isStarted = false;
+            List<RecognitionComponent.YoloV4Result> resultsInFile = new();
+            string currentFileName = "";
+            while(true)
             {
-                tasks[i] = Task.Factory.StartNew(() => {
-                    RecognitionComponent.YoloV4Result result;
-                    while (!ImageRecognition.resultsQueue.TryDequeue(out result)) { }
-                    results.Add(new YoloV4Result(result));
-                    
-                });
                 
+                RecognitionComponent.YoloV4Result result;
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                while (!ImageRecognition.resultsQueue.TryDequeue(out result)) 
+                {
+                    if (isStarted && (watch.ElapsedMilliseconds > 1000)) break;
+                }
+                isStarted = true;
+                watch.Stop();
+                
+                if (result != null)
+                {
+                    if (currentFileName.Equals(""))
+                    {
+                        currentFileName = result.FileName;
+                        resultsInFile.Add(result);
+                    }
+                    else if (currentFileName.Equals(result.FileName))
+                    {
+                        resultsInFile.Add(result);
+                    }
+                    else
+                    {
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            DrawResults(resultsInFile, currentFileName);
+                        });
+                        resultsInFile = new();
+                        currentFileName = result.FileName;
+                        resultsInFile.Add(result);
+                    }
+                    
+                }
+                else
+                {
+                    if (resultsInFile.Count != 0)
+                    {
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            DrawResults(resultsInFile, currentFileName);
+                        });
+                    }
+                    break;
+                }
             }
-            task.Wait();
-            Task.WhenAll(tasks);
-            isRunning = false;
-            
-            return results;
-            
         }
+
 
         public List<ImageInfo> GetBitmaps()
         {
@@ -96,5 +120,122 @@ namespace ViewModel
             }
         }
 
+        public static BitmapImage ToBitmapImage(Bitmap bitmap)
+        {
+            using (var memory = new MemoryStream())
+            {
+                bitmap.Save(memory, ImageFormat.Png);
+                memory.Position = 0;
+
+                var bitmapImage = new BitmapImage();
+                
+                bitmapImage.BeginInit();
+                bitmapImage.StreamSource = memory;
+                bitmapImage.CacheOption = BitmapCacheOption.OnLoad;
+                bitmapImage.EndInit();
+                bitmapImage.Freeze();
+
+                return bitmapImage;
+            }
+        }
+
+        public System.Windows.Controls.Image ImageFromBitmap(Bitmap bitmap)
+        {
+            return new System.Windows.Controls.Image
+            {
+                Source = ToBitmapImage(bitmap),
+                Width = 300
+            };
+
+        }
+
+        public void UpdateImages()
+        {
+            Images.Clear();
+            ResultsList.Clear();
+            var bitmaps = GetBitmaps();
+            foreach (var bitmap in bitmaps)
+            {
+                Images.Add(ImageFromBitmap(bitmap.Bitmap));
+            }
+        }
+
+        public void DrawResults(List<RecognitionComponent.YoloV4Result> results, string fileName)
+        {
+            ImageInfo imageInfo = new();
+            foreach (var imInfo in GetBitmaps())
+            { 
+                if (imInfo.FileName.Equals(fileName))
+                {
+                    imageInfo = imInfo;
+                    break;
+                }
+            }
+                using (var g = Graphics.FromImage(imageInfo.Bitmap))
+                {
+                    bool haveRecognizedClasses = false;
+                    foreach (var result in results)
+                    {
+                        if (result.FileName.Equals(imageInfo.FileName))
+                        {
+                            haveRecognizedClasses = true;
+                            var x1 = result.BBox[0];
+                            var y1 = result.BBox[1];
+                            var x2 = result.BBox[2];
+                            var y2 = result.BBox[3];
+                            g.DrawRectangle(Pens.Red, x1, y1, x2 - x1, y2 - y1);
+                            using (var brushes = new SolidBrush(System.Drawing.Color.FromArgb(50, System.Drawing.Color.Red)))
+                            {
+                                g.FillRectangle(brushes, x1, y1, x2 - x1, y2 - y1);
+                            }
+
+                            g.DrawString(result.Label + " " + result.Confidence.ToString("0.00"),
+                                 new Font("Arial", 12), System.Drawing.Brushes.Blue, new PointF(x1, y1));
+                        }
+                    }
+                    if (haveRecognizedClasses == true)
+                    {
+                        ResultsList.Add(ImageFromBitmap(imageInfo.Bitmap));
+                    }
+
+                }
+            
+
+        }
+
+        public void DrawResult(RecognitionComponent.YoloV4Result result)
+        {
+            foreach (var imageInfo in GetBitmaps())
+            {
+                using (var g = Graphics.FromImage(imageInfo.Bitmap))
+                {
+                    bool haveRecognizedClasses = false;
+                    
+                        if (result.FileName.Equals(imageInfo.FileName))
+                        {
+                            haveRecognizedClasses = true;
+                            var x1 = result.BBox[0];
+                            var y1 = result.BBox[1];
+                            var x2 = result.BBox[2];
+                            var y2 = result.BBox[3];
+                            g.DrawRectangle(Pens.Red, x1, y1, x2 - x1, y2 - y1);
+                            using (var brushes = new SolidBrush(System.Drawing.Color.FromArgb(50, System.Drawing.Color.Red)))
+                            {
+                                g.FillRectangle(brushes, x1, y1, x2 - x1, y2 - y1);
+                            }
+
+                            g.DrawString(result.Label + " " + result.Confidence.ToString("0.00"),
+                                 new Font("Arial", 12), System.Drawing.Brushes.Blue, new PointF(x1, y1));
+                        }
+                    
+                    if (haveRecognizedClasses == true)
+                    {
+                        ResultsList.Add(ImageFromBitmap(imageInfo.Bitmap));
+                    }
+
+                }
+            }
+
+        }
     }
 }

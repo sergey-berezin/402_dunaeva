@@ -84,6 +84,7 @@ namespace RecognitionComponent
             }
 
             Task[] tasksResult = new Task[fileNames.Length];
+            object locker = new object();
             
             for (int j = 0; j < fileNames.Length; j++)
             {
@@ -101,6 +102,7 @@ namespace RecognitionComponent
                     
                     var results = predict.GetResults(classesNames, imageInfo.FileName, 0.3f, 0.7f);
                     Console.WriteLine(imageInfo.FileName);
+                    
                     foreach (var res in results)
                     {
                         resultsQueue.Enqueue(res);

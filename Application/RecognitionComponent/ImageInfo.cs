@@ -6,10 +6,11 @@ using System.Drawing;
 
 namespace RecognitionComponent
 {
-    class ImageInfo
+    public class ImageInfo
     {
         public Bitmap Bitmap { get; set; }
         public string FileName { get; set; }
+        public ImageInfo() { }
         public ImageInfo(Bitmap bitmap, string fileName)
         {
             this.Bitmap = bitmap;

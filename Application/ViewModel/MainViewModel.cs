@@ -12,6 +12,8 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Windows.Input;
 using System.Windows;
+using Microsoft.EntityFrameworkCore;
+using System.Linq;
 
 namespace ViewModel
 {
@@ -25,6 +27,8 @@ namespace ViewModel
         {
             Images = new();
             ResultsList = new();
+            DatabaseList = new();
+            GetDatabaseImages();
         }
 
         private Folder selectedFolder;
@@ -46,6 +50,7 @@ namespace ViewModel
 
         public ObservableCollection<System.Windows.Controls.Image> Images { get; set; }
         public ObservableCollection<System.Windows.Controls.Image> ResultsList { get; set; }
+        public ObservableCollection<System.Windows.Controls.Image> DatabaseList { get; set; }
         public void Recognize(CancellationToken token)
         {
             if (token.IsCancellationRequested) return;
@@ -65,7 +70,7 @@ namespace ViewModel
                 var watch = System.Diagnostics.Stopwatch.StartNew();
                 while (!ImageRecognition.resultsQueue.TryDequeue(out result)) 
                 {
-                    if (isStarted && (watch.ElapsedMilliseconds > 1000)) break;
+                    if (isStarted && (watch.ElapsedMilliseconds > 3000)) break;
                 }
                 isStarted = true;
                 watch.Stop();
@@ -106,7 +111,6 @@ namespace ViewModel
                 }
             }
         }
-
 
         public List<ImageInfo> GetBitmaps()
         {
@@ -171,9 +175,22 @@ namespace ViewModel
                     break;
                 }
             }
+            using (var db = new ImageContext())
+            {
                 using (var g = Graphics.FromImage(imageInfo.Bitmap))
                 {
                     bool haveRecognizedClasses = false;
+                    bool isExists = false;
+                    ImageEntity imageEntity = new ImageEntity() { };
+                    // смотрим была ли уже такая картинка в бд
+                    // если была, флаг в true
+                    var currentImage = ImageToByte(imageInfo.Bitmap);
+                    var query = db.ImageEntities.Where(entity => entity.Image.Equals(currentImage));
+                    if (query.Count() != 0)
+                    {
+                        isExists = true;
+                    }
+
                     foreach (var result in results)
                     {
                         if (result.FileName.Equals(imageInfo.FileName))
@@ -191,19 +208,48 @@ namespace ViewModel
 
                             g.DrawString(result.Label + " " + result.Confidence.ToString("0.00"),
                                  new Font("Arial", 12), System.Drawing.Brushes.Blue, new PointF(x1, y1));
+
+                            if (!isExists)
+                            {
+                                BBox box = new BBox() { X1 = result.BBox[0], Y1 = result.BBox[1], 
+                                X2 = result.BBox[3], Y2 = result.BBox[4]};
+                                ResultEntity resultEntity = new ResultEntity() { Confidence = result.Confidence, 
+                                Label = result.Label };
+                                box.ResultEntity = resultEntity;
+                                resultEntity.BBox = box;
+                                imageEntity.Image = ImageToByte(imageInfo.Bitmap);
+                                imageEntity.Results.Add(resultEntity);
+                                db.BBoxes.Add(box);
+                                db.ResultEntities.Add(resultEntity);
+                            }
                         }
                     }
                     if (haveRecognizedClasses == true)
                     {
                         ResultsList.Add(ImageFromBitmap(imageInfo.Bitmap));
                     }
-
+                    if (!isExists)
+                    {
+                        db.ImageEntities.Add(imageEntity);
+                        db.SaveChanges();
+                    }   
                 }
-            
+            }
 
         }
 
-        public void DrawResult(RecognitionComponent.YoloV4Result result)
+        public void GetDatabaseImages()
+        {
+
+        }
+
+        public byte[] ImageToByte(Image img)
+        {
+            ImageConverter converter = new ImageConverter();
+            return (byte[])converter.ConvertTo(img, typeof(byte[]));
+        }
+
+        /*public void DrawResult(RecognitionComponent.YoloV4Result result)
         {
             foreach (var imageInfo in GetBitmaps())
             {
@@ -236,6 +282,6 @@ namespace ViewModel
                 }
             }
 
-        }
+        }*/
     }
 }

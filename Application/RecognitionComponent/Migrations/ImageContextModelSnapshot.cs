@@ -51,6 +51,9 @@ namespace RecognitionComponent.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("HashCode")
+                        .HasColumnType("INTEGER");
+
                     b.Property<byte[]>("Image")
                         .HasColumnType("BLOB");
 

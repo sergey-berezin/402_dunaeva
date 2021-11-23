@@ -13,5 +13,17 @@ namespace RecognitionComponent
         public int ImageEntityId { get; set; }
         public byte[] Image { get; set; }
         public List<ResultEntity> Results { get; } = new List<ResultEntity>();
+        public int HashCode { get; set; }
+
+        public static int ComputeHashCode(byte[] arr)
+        {
+            int hash = 0;
+            if (arr == null) return 0;
+            foreach (var b in arr)
+            {
+                hash = (hash + b.GetHashCode()) % int.MaxValue; 
+            }
+            return hash;
+        }
     }
 }

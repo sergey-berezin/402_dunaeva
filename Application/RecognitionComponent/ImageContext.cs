@@ -13,6 +13,6 @@ namespace RecognitionComponent
         public DbSet<ResultEntity> ResultEntities { get; set; }
         public DbSet<BBox> BBoxes { get; set; }
         protected override void OnConfiguring(DbContextOptionsBuilder o)
-            => o.UseSqlite("Data Source=images.db");
+            => o.UseSqlite("Data Source=C:\\Users\\Nastya\\source\\repos\\7sem\\402_dunaeva\\Application\\RecognitionComponent\\images.db");
     }
 }

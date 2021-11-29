@@ -77,7 +77,15 @@ namespace UI
             
             cts.Cancel();
         }
-        
+
+        private void Button_Remove_Click(object sender, RoutedEventArgs e)
+        {
+            if (databaseListBox.Items.Count != 0)
+            {
+                model.RemoveFromDatabase();
+            }
+        }
+
     }
 
     public class WPFUIServices : IUIServices

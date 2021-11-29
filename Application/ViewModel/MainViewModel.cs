@@ -12,6 +12,8 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Windows.Input;
 using System.Windows;
+using Microsoft.EntityFrameworkCore;
+using System.Linq;
 
 namespace ViewModel
 {
@@ -25,6 +27,8 @@ namespace ViewModel
         {
             Images = new();
             ResultsList = new();
+            DatabaseList = new();
+            GetDatabaseImages();
         }
 
         private Folder selectedFolder;
@@ -46,6 +50,7 @@ namespace ViewModel
 
         public ObservableCollection<System.Windows.Controls.Image> Images { get; set; }
         public ObservableCollection<System.Windows.Controls.Image> ResultsList { get; set; }
+        public ObservableCollection<System.Windows.Controls.Image> DatabaseList { get; set; }
         public void Recognize(CancellationToken token)
         {
             if (token.IsCancellationRequested) return;
@@ -65,7 +70,7 @@ namespace ViewModel
                 var watch = System.Diagnostics.Stopwatch.StartNew();
                 while (!ImageRecognition.resultsQueue.TryDequeue(out result)) 
                 {
-                    if (isStarted && (watch.ElapsedMilliseconds > 1000)) break;
+                    if (isStarted && (watch.ElapsedMilliseconds > 5000)) break;
                 }
                 isStarted = true;
                 watch.Stop();
@@ -106,7 +111,6 @@ namespace ViewModel
                 }
             }
         }
-
 
         public List<ImageInfo> GetBitmaps()
         {
@@ -171,9 +175,27 @@ namespace ViewModel
                     break;
                 }
             }
+            using (var db = new ImageContext())
+            {
                 using (var g = Graphics.FromImage(imageInfo.Bitmap))
                 {
                     bool haveRecognizedClasses = false;
+                    bool isExists = false;
+                    ImageEntity imageEntity = new ImageEntity() { };
+                    
+                    var currentImage = ImageToByte(imageInfo.Bitmap);
+                    int currentHash = ImageEntity.ComputeHashCode(currentImage);
+
+                    var queryHash = db.ImageEntities.Where(entity => entity.HashCode == currentHash);
+
+                    if (queryHash.Any())
+                    {
+                        foreach (var entity in queryHash)
+                        {
+                            if (Enumerable.SequenceEqual(entity.Image, currentImage)) isExists = true;
+                        }
+                    }
+
                     foreach (var result in results)
                     {
                         if (result.FileName.Equals(imageInfo.FileName))
@@ -191,51 +213,103 @@ namespace ViewModel
 
                             g.DrawString(result.Label + " " + result.Confidence.ToString("0.00"),
                                  new Font("Arial", 12), System.Drawing.Brushes.Blue, new PointF(x1, y1));
-                        }
-                    }
-                    if (haveRecognizedClasses == true)
-                    {
-                        ResultsList.Add(ImageFromBitmap(imageInfo.Bitmap));
-                    }
 
-                }
-            
-
-        }
-
-        public void DrawResult(RecognitionComponent.YoloV4Result result)
-        {
-            foreach (var imageInfo in GetBitmaps())
-            {
-                using (var g = Graphics.FromImage(imageInfo.Bitmap))
-                {
-                    bool haveRecognizedClasses = false;
-                    
-                        if (result.FileName.Equals(imageInfo.FileName))
-                        {
-                            haveRecognizedClasses = true;
-                            var x1 = result.BBox[0];
-                            var y1 = result.BBox[1];
-                            var x2 = result.BBox[2];
-                            var y2 = result.BBox[3];
-                            g.DrawRectangle(Pens.Red, x1, y1, x2 - x1, y2 - y1);
-                            using (var brushes = new SolidBrush(System.Drawing.Color.FromArgb(50, System.Drawing.Color.Red)))
+                            if (!isExists)
                             {
-                                g.FillRectangle(brushes, x1, y1, x2 - x1, y2 - y1);
+                                BBox box = new BBox() { X1 = result.BBox[0], Y1 = result.BBox[1], 
+                                X2 = result.BBox[2], Y2 = result.BBox[3]};
+                                ResultEntity resultEntity = new ResultEntity() { Confidence = result.Confidence, 
+                                Label = result.Label };
+                                box.ResultEntity = resultEntity;
+                                resultEntity.BBox = box;
+                                imageEntity.Image = currentImage;
+                                imageEntity.HashCode = currentHash;
+                                imageEntity.Results.Add(resultEntity);
+                                db.BBoxes.Add(box);
+                                db.ResultEntities.Add(resultEntity);
                             }
-
-                            g.DrawString(result.Label + " " + result.Confidence.ToString("0.00"),
-                                 new Font("Arial", 12), System.Drawing.Brushes.Blue, new PointF(x1, y1));
                         }
-                    
+                    }
                     if (haveRecognizedClasses == true)
                     {
                         ResultsList.Add(ImageFromBitmap(imageInfo.Bitmap));
                     }
-
+                    if (!isExists)
+                    {
+                        db.ImageEntities.Add(imageEntity);
+                        db.SaveChanges();
+                        DatabaseList.Add(ImageFromBitmap(imageInfo.Bitmap));
+                    }   
                 }
             }
 
+        }
+
+        public void GetDatabaseImages()
+        {
+            DatabaseList.Clear();
+            using (var db = new ImageContext())
+            {
+                var queryImages = db.ImageEntities;
+                foreach (var imageEntity in queryImages)
+                {
+                    var ms = new MemoryStream(imageEntity.Image);
+                    Bitmap bitmap = new Bitmap(ms);
+                    var queryResults = db.ResultEntities.Where(res => res.ImageEntityId == imageEntity.ImageEntityId);
+                    var results = new List<RecognitionComponent.YoloV4Result>();
+                    foreach (var res in queryResults)
+                    {
+                        BBox box = db.BBoxes.Where(b => b.ResultEntityId == res.ResultEntityId).FirstOrDefault();
+                        float[] bbox = new float[] { box.X1, box.Y1, box.X2, box.Y2 };
+                        RecognitionComponent.YoloV4Result result = new(bbox, res.Label, res.Confidence, "");
+                        results.Add(result);
+                    }
+                    DrawResultsOnImage(bitmap, results);
+                }
+            }
+        }
+
+        public byte[] ImageToByte(Image img)
+        {
+            ImageConverter converter = new ImageConverter();
+            return (byte[])converter.ConvertTo(img, typeof(byte[]));
+        }
+
+        public void DrawResultsOnImage(Bitmap bitmap, List<RecognitionComponent.YoloV4Result> results)
+        {
+            using (var g = Graphics.FromImage(bitmap))
+            {
+                foreach (var result in results)
+                {
+                    var x1 = result.BBox[0];
+                    var y1 = result.BBox[1];
+                    var x2 = result.BBox[2];
+                    var y2 = result.BBox[3];
+                    g.DrawRectangle(Pens.Red, x1, y1, x2 - x1, y2 - y1);
+                    using (var brushes = new SolidBrush(System.Drawing.Color.FromArgb(50, System.Drawing.Color.Red)))
+                    {
+                        g.FillRectangle(brushes, x1, y1, x2 - x1, y2 - y1);
+                    }
+
+                    g.DrawString(result.Label + " " + result.Confidence.ToString("0.00"),
+                    new Font("Arial", 12), System.Drawing.Brushes.Blue, new PointF(x1, y1));
+                }
+                DatabaseList.Add(ImageFromBitmap(bitmap));
+            }
+        }
+
+        public void RemoveFromDatabase()
+        {
+            using (var db = new ImageContext())
+            {
+                var query = db.ImageEntities;
+                foreach (var entity in query)
+                {
+                    db.ImageEntities.Remove(entity);
+                }
+                db.SaveChanges();
+            }
+            DatabaseList.Clear();
         }
     }
 }

@@ -58,10 +58,9 @@ namespace UI
             cts = new CancellationTokenSource();
 
             await Task.Factory.StartNew(() => {
-
                 try
                 {
-                    model.Recognize(cts.Token);
+                    model.RecognizeOnServer(cts.Token);
                 }
                 catch (Exception e)
                 {

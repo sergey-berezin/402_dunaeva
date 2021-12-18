@@ -11,7 +11,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "UI", "UI\UI.csproj", "{98D4
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ViewModel", "ViewModel\ViewModel.csproj", "{4B1710D5-62A0-4476-8639-A0B0D5C81D6B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Web", "Web\Web.csproj", "{EA9DB235-D8B2-4EC8-9535-53892FE09E7D}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Web", "Web\Web.csproj", "{EA9DB235-D8B2-4EC8-9535-53892FE09E7D}"
+EndProject
+Project("{9092AA53-FB77-4645-B42D-1CCCA6BD08BD}") = "NodejsUi", "NodejsUi\NodejsUi.njsproj", "{86B77FB3-E5A2-4392-AA81-51E4E8470D98}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -39,6 +41,10 @@ Global
 		{EA9DB235-D8B2-4EC8-9535-53892FE09E7D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{EA9DB235-D8B2-4EC8-9535-53892FE09E7D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{EA9DB235-D8B2-4EC8-9535-53892FE09E7D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{86B77FB3-E5A2-4392-AA81-51E4E8470D98}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{86B77FB3-E5A2-4392-AA81-51E4E8470D98}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{86B77FB3-E5A2-4392-AA81-51E4E8470D98}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{86B77FB3-E5A2-4392-AA81-51E4E8470D98}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

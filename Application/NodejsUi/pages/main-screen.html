@@ -1,0 +1,20 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <title>Database</title>
+    <link rel="stylesheet" href="Styles.css" />
+</head>
+    <body>
+        <p>
+            <select id="labels" onchange="changeFunc();">
+                <option disabled>Select label</option>
+            </select>
+        </p>
+        <div id="image_counter"></div>
+        <div id="container" class="image-container">
+            <a class="button-prev" onclick="plusSlides(-1)">&#10094</a>
+            <a class="button-next" onclick="plusSlides(1)">&#10095</a>
+        </div>
+        <script src="selection.js"></script>
+    </body>
+</html>

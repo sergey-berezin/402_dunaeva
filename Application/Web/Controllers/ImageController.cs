@@ -132,6 +132,32 @@ namespace Web.Controllers
             return StatusCode(204, "successfully removed");
         }
 
+        [HttpGet("labels")]
+        public ActionResult<string[]> GetLabels()
+        {
+            var results = db.GetAllResults().ToArray();
+            List<string> labels = new();
+            foreach (var result in results)
+            {
+                string label = result.Label;
+                if (!labels.Contains(label))
+                {
+                    labels.Add(label);
+                }
+            }
+            return labels.ToArray();
+        }
 
+        [HttpGet("labels/{label}")]
+        public ActionResult<byte[][]> GetImagesByLabel(string label)
+        {
+            var results = db.GetImagesByLabel(label);
+            List<byte[]> bytes = new();
+            foreach (var res in results)
+            {
+                bytes.Add(res.Image);
+            }
+            return bytes.ToArray();
+        }
     }
 }

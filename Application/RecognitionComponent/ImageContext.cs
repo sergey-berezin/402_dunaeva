@@ -18,6 +18,10 @@ namespace RecognitionComponent
         {
             return ImageEntities;
         }
+        public IEnumerable<ResultEntity> GetAllResults()
+        {
+            return ResultEntities;
+        }
         public ImageEntity TryGetImage(int id)
         {
             var queryHash = ImageEntities.Where(entity => entity.ImageEntityId == id);
@@ -73,6 +77,22 @@ namespace RecognitionComponent
         public BBox GetBoxByResultEntityId(int resultEntityId)
         {
             return BBoxes.Where(b => b.ResultEntityId == resultEntityId).FirstOrDefault();
+        }
+
+        public ImageEntity[] GetImagesByLabel(string label)
+        {
+            var resultEntities = ResultEntities.Where(res => res.Label == label);
+            List<ImageEntity> results = new();
+            foreach (var entity in resultEntities)
+            {
+                var imageEntityId = entity.ImageEntityId;
+                if (!results.Any(imageEntity => imageEntity.ImageEntityId == imageEntityId))
+                {
+                    var imageEntity = ImageEntities.Where(en => en.ImageEntityId == imageEntityId).FirstOrDefault();
+                    results.Add(imageEntity);
+                }
+            }
+            return results.ToArray();
         }
     }
 }

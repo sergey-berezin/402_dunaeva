@@ -1,0 +1,19 @@
+.image-container {
+     max-width: 1000px;
+}
+
+.mySlides {
+    max-width: 300px;
+}
+
+.button-prev, .button-next {
+    cursor: pointer;
+    position: absolute;
+    top: 50%;
+    border-radius: 0 7px 7px 0;
+}
+
+.button-next {
+    right: 0;
+    border-radius: 7px 0 0 7px;
+}
